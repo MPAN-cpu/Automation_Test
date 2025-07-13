@@ -32,14 +32,14 @@ def get_sheet_data(spreadsheet_id, sheet_name):
         data = [df.columns.tolist()] + df.values.tolist()
         
         print(f"Successfully fetched {len(data)} rows from sheet")
-        return data
+        return data, df
         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching sheet data: {e}")
-        return []
+        return [], None
     except Exception as e:
         print(f"Error parsing CSV data: {e}")
-        return []
+        return [], None
 
 def calculate_data_hash(data):
     """Calculate hash of sheet data to detect changes."""
@@ -55,14 +55,15 @@ def load_previous_state():
                 return json.load(f)
         except Exception as e:
             print(f"Error loading state file: {e}")
-    return {'last_hash': None, 'last_check': None}
+    return {'last_hash': None, 'last_check': None, 'last_row_count': 0}
 
-def save_state(data_hash):
+def save_state(data_hash, row_count):
     """Save current state to file."""
     state_file = 'sheets_state.json'
     state = {
         'last_hash': data_hash,
-        'last_check': datetime.now().isoformat()
+        'last_check': datetime.now().isoformat(),
+        'last_row_count': row_count
     }
     try:
         with open(state_file, 'w') as f:
@@ -70,16 +71,27 @@ def save_state(data_hash):
     except Exception as e:
         print(f"Error saving state file: {e}")
 
-def count_new_records(old_data, new_data):
-    """Count new records by comparing data."""
-    if not old_data:
-        return len(new_data) if new_data else 0
+def get_latest_instance_id(df, previous_row_count):
+    """Get the instanceID from the latest added row."""
+    if df is None or df.empty:
+        return None
     
-    # Simple comparison - count rows that weren't in the old data
-    old_rows = set(tuple(row) for row in old_data if row)
-    new_rows = set(tuple(row) for row in new_data if row)
+    # Check if instanceID column exists
+    if 'instanceID' not in df.columns:
+        print("Warning: 'instanceID' column not found in sheet")
+        return None
     
-    return len(new_rows - old_rows)
+    # Get the latest row (assuming new rows are added at the bottom)
+    current_row_count = len(df)
+    
+    if current_row_count > previous_row_count:
+        # Get the latest row
+        latest_row = df.iloc[-1]
+        instance_id = latest_row['instanceID']
+        print(f"Latest instanceID: {instance_id}")
+        return str(instance_id)
+    
+    return None
 
 def main():
     """Main function to check for sheet updates."""
@@ -92,35 +104,43 @@ def main():
         exit(1)
     
     # Get current sheet data
-    current_data = get_sheet_data(spreadsheet_id, sheet_name)
+    current_data, df = get_sheet_data(spreadsheet_id, sheet_name)
     if not current_data:
         print("No data found in sheet")
         exit(0)
     
     # Calculate current data hash
     current_hash = calculate_data_hash(current_data)
+    current_row_count = len(current_data) - 1  # Subtract header row
     
     # Load previous state
     previous_state = load_previous_state()
+    previous_row_count = previous_state.get('last_row_count', 0)
     
     # Check for updates
     has_updates = False
     new_records_count = 0
+    latest_instance_id = None
     
     if previous_state['last_hash'] != current_hash:
         has_updates = True
         print(f"Changes detected in Google Sheet!")
         print(f"Previous hash: {previous_state['last_hash']}")
         print(f"Current hash: {current_hash}")
+        print(f"Previous row count: {previous_row_count}")
+        print(f"Current row count: {current_row_count}")
         
         # Calculate new records count
         if previous_state['last_hash']:
-            new_records_count = len(current_data) - 1  # Subtract header row
+            new_records_count = current_row_count - previous_row_count
         else:
-            new_records_count = len(current_data) - 1  # First run, count all data rows
+            new_records_count = current_row_count  # First run, count all data rows
+        
+        # Get the latest instanceID
+        latest_instance_id = get_latest_instance_id(df, previous_row_count)
     
     # Save current state
-    save_state(current_hash)
+    save_state(current_hash, current_row_count)
     
     # Set output for GitHub Actions using environment files
     github_output = os.environ.get('GITHUB_OUTPUT')
@@ -130,6 +150,8 @@ def main():
                 f.write(f"has_updates=true\n")
                 f.write(f"new_records_count={new_records_count}\n")
                 f.write(f"last_check={datetime.now().isoformat()}\n")
+                if latest_instance_id:
+                    f.write(f"latest_instance_id={latest_instance_id}\n")
             else:
                 f.write(f"has_updates=false\n")
     
@@ -138,6 +160,8 @@ def main():
         print(f"has_updates=true")
         print(f"new_records_count={new_records_count}")
         print(f"last_check={datetime.now().isoformat()}")
+        if latest_instance_id:
+            print(f"latest_instance_id={latest_instance_id}")
     else:
         print(f"has_updates=false")
         print("No updates detected")
