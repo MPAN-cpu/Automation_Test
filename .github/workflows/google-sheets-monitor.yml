@@ -2,10 +2,15 @@ name: Monitor Google Sheets Updates
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
+    # Run every 15 minutes (more reliable than 5 minutes)
+    - cron: '*/15 * * * *'
+    # Also run at specific times for better reliability
+    - cron: '0 */1 * * *'  # Every hour at minute 0
   workflow_dispatch:
     # Allow manual triggering
+  push:
+    # Run when code is pushed (for testing)
+    branches: [ main, master ]
 
 permissions:
   issues: write
@@ -38,6 +43,9 @@ jobs:
     - name: Create issue on update
       if: steps.check-updates.outputs.has_updates == 'true'
       uses: actions/github-script@v7
+      env:
+        GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+        SHEET_NAME: ${{ secrets.SHEET_NAME }}
       with:
         script: |
           const { data: issues } = await github.rest.issues.listForRepo({
