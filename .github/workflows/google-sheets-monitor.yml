@@ -25,13 +25,14 @@ jobs:
         pip install pandas requests
         
     - name: Check for Google Sheets updates
+      id: check-updates
       env:
         GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
         SHEET_NAME: ${{ secrets.SHEET_NAME }}
       run: python scripts/check_sheets_updates.py
       
     - name: Create issue on update
-      if: steps.check-sheets-updates.outputs.has_updates == 'true'
+      if: steps.check-updates.outputs.has_updates == 'true'
       uses: actions/github-script@v7
       with:
         script: |
