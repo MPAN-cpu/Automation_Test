@@ -48,64 +48,49 @@ jobs:
         PROJECT_COLUMN_ID: ${{ secrets.PROJECT_COLUMN_ID }}
       with:
         script: |
-          const { data: issues } = await github.rest.issues.listForRepo({
+          // Create the issue for every change detected
+          const issue = await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            state: 'open',
-            labels: ['google-sheets-update']
+            title: `Google Sheets Update - ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`,
+            body: `A new record has been updated in the Google Sheet.\n\n**Sheet ID:** ${process.env.GOOGLE_SHEETS_ID}\n**Sheet Name:** ${process.env.SHEET_NAME}\n**Timestamp:** ${new Date().toISOString()}\n\nThis issue was automatically created by GitHub Actions.`,
+            labels: ['google-sheets-update', 'automated']
           });
           
-          // Check if an issue already exists for today
-          const today = new Date().toISOString().split('T')[0];
-          const existingIssue = issues.find(issue => 
-            issue.title.includes(today) && issue.title.includes('Google Sheets Update')
-          );
-          
-          if (!existingIssue) {
-            // Create the issue
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Google Sheets Update - ${today}`,
-              body: `A new record has been updated in the Google Sheet.\n\n**Sheet ID:** ${process.env.GOOGLE_SHEETS_ID}\n**Sheet Name:** ${process.env.SHEET_NAME}\n\nThis issue was automatically created by GitHub Actions.`,
-              labels: ['google-sheets-update', 'automated']
-            });
-            
-            // Add issue to project if project number is provided
-            if (process.env.PROJECT_NUMBER) {
-              try {
-                // Get project ID from project number
-                const projects = await github.rest.projects.listForRepo({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo
+          // Add issue to project if project number is provided
+          if (process.env.PROJECT_NUMBER) {
+            try {
+              // Get project ID from project number
+              const projects = await github.rest.projects.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              
+              const project = projects.data.find(p => p.number == process.env.PROJECT_NUMBER);
+              
+              if (project) {
+                // Get project columns
+                const columns = await github.rest.projects.listColumns({
+                  project_id: project.id
                 });
                 
-                const project = projects.data.find(p => p.number == process.env.PROJECT_NUMBER);
+                // Use first column if no specific column ID is provided
+                const targetColumnId = process.env.PROJECT_COLUMN_ID || columns.data[0].id;
                 
-                if (project) {
-                  // Get project columns
-                  const columns = await github.rest.projects.listColumns({
-                    project_id: project.id
-                  });
-                  
-                  // Use first column if no specific column ID is provided
-                  const targetColumnId = process.env.PROJECT_COLUMN_ID || columns.data[0].id;
-                  
-                  // Create project card
-                  await github.rest.projects.createCard({
-                    column_id: targetColumnId,
-                    content_id: issue.data.id,
-                    content_type: 'Issue'
-                  });
-                  
-                  console.log(`✅ Added issue #${issue.data.number} to project #${process.env.PROJECT_NUMBER}`);
-                } else {
-                  console.log(`❌ Project #${process.env.PROJECT_NUMBER} not found`);
-                }
-              } catch (error) {
-                console.log(`❌ Could not add issue to project: ${error.message}`);
+                // Create project card
+                await github.rest.projects.createCard({
+                  column_id: targetColumnId,
+                  content_id: issue.data.id,
+                  content_type: 'Issue'
+                });
+                
+                console.log(`✅ Added issue #${issue.data.number} to project #${process.env.PROJECT_NUMBER}`);
+              } else {
+                console.log(`❌ Project #${process.env.PROJECT_NUMBER} not found`);
               }
-            } else {
-              console.log(`ℹ️ No PROJECT_NUMBER secret provided, skipping project assignment`);
+            } catch (error) {
+              console.log(`❌ Could not add issue to project: ${error.message}`);
             }
+          } else {
+            console.log(`ℹ️ No PROJECT_NUMBER secret provided, skipping project assignment`);
           } 
