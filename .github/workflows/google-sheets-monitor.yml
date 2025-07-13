@@ -31,6 +31,12 @@ jobs:
       run: |
         pip install pandas requests
         
+    - name: Restore state cache
+      uses: actions/cache@v3
+      with:
+        path: sheets_state.json
+        key: sheets-state-${{ secrets.GOOGLE_SHEETS_ID }}
+        
     - name: Check for Google Sheets updates
       id: check-updates
       env:
@@ -38,6 +44,12 @@ jobs:
         SHEET_NAME: ${{ secrets.SHEET_NAME }}
       run: python scripts/check_sheets_updates.py
       
+    - name: Save state cache
+      uses: actions/cache@v3
+      with:
+        path: sheets_state.json
+        key: sheets-state-${{ secrets.GOOGLE_SHEETS_ID }}
+        
     - name: Create issue on update
       if: steps.check-updates.outputs.has_updates == 'true'
       uses: actions/github-script@v7
