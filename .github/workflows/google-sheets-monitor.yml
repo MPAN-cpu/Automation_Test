@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
     # Allow manual triggering
 
+permissions:
+  issues: write
+  contents: read
+
 jobs:
   check-sheets-updates:
     runs-on: ubuntu-latest
