@@ -1,0 +1,59 @@
+name: Monitor Google Sheets Updates
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  check-sheets-updates:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        pip install pandas requests
+        
+    - name: Check for Google Sheets updates
+      env:
+        GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+        SHEET_NAME: ${{ secrets.SHEET_NAME }}
+      run: python scripts/check_sheets_updates.py
+      
+    - name: Create issue on update
+      if: steps.check-sheets-updates.outputs.has_updates == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: issues } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            labels: ['google-sheets-update']
+          });
+          
+          // Check if an issue already exists for today
+          const today = new Date().toISOString().split('T')[0];
+          const existingIssue = issues.find(issue => 
+            issue.title.includes(today) && issue.title.includes('Google Sheets Update')
+          );
+          
+          if (!existingIssue) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Google Sheets Update - ${today}`,
+              body: `A new record has been updated in the Google Sheet.\n\n**Sheet ID:** ${process.env.GOOGLE_SHEETS_ID}\n**Sheet Name:** ${process.env.SHEET_NAME}\n\nThis issue was automatically created by GitHub Actions.`,
+              labels: ['google-sheets-update', 'automated']
+            });
+          } 
