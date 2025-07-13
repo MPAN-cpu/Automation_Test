@@ -60,12 +60,23 @@ jobs:
         PROJECT_COLUMN_ID: ${{ secrets.PROJECT_COLUMN_ID }}
       with:
         script: |
+          // Get the instanceID from the script output
+          const instanceId = '${{ steps.check-updates.outputs.latest_instance_id }}';
+          
+          // Create custom title with instanceID if available
+          let title;
+          if (instanceId && instanceId !== '') {
+            title = `New Instance Added - ${instanceId} - ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
+          } else {
+            title = `Google Sheets Update - ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
+          }
+          
           // Create the issue for every change detected
           const issue = await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            title: `Google Sheets Update - ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`,
-            body: `A new record has been updated in the Google Sheet.\n\n**Sheet ID:** ${process.env.GOOGLE_SHEETS_ID}\n**Sheet Name:** ${process.env.SHEET_NAME}\n**Timestamp:** ${new Date().toISOString()}\n\nThis issue was automatically created by GitHub Actions.`,
+            title: title,
+            body: `A new record has been updated in the Google Sheet.\n\n**Sheet ID:** ${process.env.GOOGLE_SHEETS_ID}\n**Sheet Name:** ${process.env.SHEET_NAME}\n**Instance ID:** ${instanceId || 'Not available'}\n**Timestamp:** ${new Date().toISOString()}\n\nThis issue was automatically created by GitHub Actions.`,
             labels: ['google-sheets-update', 'automated']
           });
           
