@@ -122,13 +122,24 @@ def main():
     # Save current state
     save_state(current_hash)
     
-    # Set output for GitHub Actions
+    # Set output for GitHub Actions using environment files
+    github_output = os.environ.get('GITHUB_OUTPUT')
+    if github_output:
+        with open(github_output, 'a') as f:
+            if has_updates:
+                f.write(f"has_updates=true\n")
+                f.write(f"new_records_count={new_records_count}\n")
+                f.write(f"last_check={datetime.now().isoformat()}\n")
+            else:
+                f.write(f"has_updates=false\n")
+    
+    # Also print for backward compatibility
     if has_updates:
-        print(f"::set-output name=has_updates::true")
-        print(f"::set-output name=new_records_count::{new_records_count}")
-        print(f"::set-output name=last_check::{datetime.now().isoformat()}")
+        print(f"has_updates=true")
+        print(f"new_records_count={new_records_count}")
+        print(f"last_check={datetime.now().isoformat()}")
     else:
-        print(f"::set-output name=has_updates::false")
+        print(f"has_updates=false")
         print("No updates detected")
     
     print(f"Sheet: {sheet_name}")
